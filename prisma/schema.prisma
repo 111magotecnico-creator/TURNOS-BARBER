@@ -1,0 +1,179 @@
+// ═══════════════════════════════════════════════════════════════
+// TURNOS BARBER — Modelo de datos (Prisma)
+//
+// Convenciones clave:
+// - Fechas como String "YYYY-MM-DD" (hora local de la barbería).
+//   Evita por completo bugs de zona horaria (UTC vs local).
+// - Horas como Int minutos-desde-medianoche (09:30 = 570).
+//   La matemática de superposición se vuelve aritmética simple.
+// - Sin enums SQL (portabilidad SQLite <-> PostgreSQL).
+//   Los estados se validan con Zod en src/validations.
+// ═══════════════════════════════════════════════════════════════
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Usuarios del sistema (admin / barberos con acceso al panel) ──
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String?
+  role         String   @default("ADMIN") // ADMIN | BARBER
+  barberId     String?  @unique
+  barber       Barber?  @relation(fields: [barberId], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// ── Barberos (perfil público + agenda) ───────────────────────────
+model Barber {
+  id          String        @id @default(cuid())
+  name        String
+  specialty   String?
+  description String?
+  photoUrl    String?
+  active      Boolean       @default(true)
+  sortOrder   Int           @default(0)
+  user        User?
+  workingHour WorkingHour[]
+  dayOff      DayOff[]
+  blockedSlot BlockedSlot[]
+  appointment Appointment[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+// ── Servicios ────────────────────────────────────────────────────
+model Service {
+  id          String        @id @default(cuid())
+  name        String
+  description String?
+  price       Int // unidades enteras de la moneda configurada
+  durationMin Int
+  imageUrl    String?
+  active      Boolean       @default(true)
+  sortOrder   Int           @default(0)
+  appointment Appointment[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+// ── Turnos ───────────────────────────────────────────────────────
+model Appointment {
+  id            String    @id @default(cuid())
+  code          String    @unique // código público para gestionar sin cuenta
+  status        String    @default("CONFIRMED") // CONFIRMED | COMPLETED | CANCELLED
+  date          String // YYYY-MM-DD
+  startMin      Int // minutos desde 00:00
+  endMin        Int
+  barberId      String
+  barber        Barber    @relation(fields: [barberId], references: [id])
+  serviceId     String
+  service       Service   @relation(fields: [serviceId], references: [id])
+  customerName  String
+  customerPhone String
+  customerEmail String?
+  customerId    String?
+  customer      Customer? @relation(fields: [customerId], references: [id])
+  notes         String?
+  cancelReason  String?
+  source        String    @default("PUBLIC") // PUBLIC | ADMIN
+  reminder24hAt DateTime? // anti-duplicado de recordatorios
+  reminder1hAt  DateTime?
+  payment       Payment?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([barberId, date, status])
+  @@index([date, status])
+  @@index([customerPhone])
+}
+
+// ── Horarios laborales por barbero (soporta jornadas partidas) ──
+model WorkingHour {
+  id       String  @id @default(cuid())
+  barberId String
+  barber   Barber  @relation(fields: [barberId], references: [id], onDelete: Cascade)
+  weekday  Int // 0=Lunes ... 6=Domingo
+  startMin Int
+  endMin   Int
+  active   Boolean @default(true)
+
+  @@index([barberId, weekday])
+}
+
+// ── Días libres / vacaciones ─────────────────────────────────────
+model DayOff {
+  id       String  @id @default(cuid())
+  barberId String
+  barber   Barber  @relation(fields: [barberId], references: [id], onDelete: Cascade)
+  date     String // YYYY-MM-DD
+  reason   String?
+
+  @@unique([barberId, date])
+}
+
+// ── Bloqueos puntuales de horario (almuerzos, eventos, feriados) ──
+model BlockedSlot {
+  id       String  @id @default(cuid())
+  barberId String
+  barber   Barber  @relation(fields: [barberId], references: [id], onDelete: Cascade)
+  date     String
+  startMin Int
+  endMin   Int
+  reason   String?
+
+  @@index([barberId, date])
+}
+
+// ── Clientes (agregados automáticamente por teléfono) ────────────
+model Customer {
+  id          String        @id @default(cuid())
+  phone       String        @unique
+  name        String
+  email       String?
+  notes       String?
+  blocked     Boolean       @default(false)
+  appointment Appointment[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+// ── Configuración de la barbería (fila única) ────────────────────
+model Settings {
+  id                String   @id @default("default")
+  shopName          String   @default("BARBER STUDIO")
+  address           String   @default("")
+  phone             String   @default("")
+  whatsapp          String // formato internacional sin "+", ej: 5491155555555
+  instagram         String?
+  currency          String   @default("ARS")
+  slotStepMin       Int      @default(15) // granularidad de los horarios ofrecidos
+  bookingWindowDays Int      @default(30) // días hacia adelante que se puede reservar
+  minLeadMin        Int      @default(60) // anticipación mínima respecto a "ahora"
+  depositEnabled    Boolean  @default(false)
+  depositPercent    Int      @default(0)
+  paymentMode       String   @default("ON_SITE") // FULL | DEPOSIT | ON_SITE
+  updatedAt         DateTime @updatedAt
+}
+
+// ── Pagos (esqueleto Mercado Pago — NO implementa pagos falsos) ──
+model Payment {
+  id            String      @id @default(cuid())
+  appointmentId String      @unique
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  provider      String      @default("MERCADOPAGO")
+  mode          String // FULL | DEPOSIT | ON_SITE
+  amount        Int
+  status        String      @default("PENDING") // PENDING | APPROVED | REJECTED | REFUNDED
+  externalId    String? // id de la preferencia/pago en MP
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}

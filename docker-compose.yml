@@ -1,0 +1,39 @@
+# ═════════════════════════════════════════════════════════
+# Postgres para producción.
+#
+# Requiere WSL2 instalado (wsl --install) o Docker Desktop corriendo.
+#
+# Pasos para migrar de SQLite a Postgres:
+#   1) docker compose up -d
+#   2) En prisma/schema.prisma cambiar:
+#        provider = "postgresql"   (antes "sqlite")
+#      El motor de disponibilidad ya activa el nivel extra de
+#      defensa (isolation Serializable) automáticamente al
+#      detectar URL postgres en DATABASE_URL.
+#   3) .env:
+#        DATABASE_URL="postgresql://barber:barber_dev@localhost:5432/turnos_barber"
+#   4) npx prisma migrate dev --name init    (crea migraciones reales)
+#   5) npm run db:seed
+# ═════════════════════════════════════════════════════════
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: turnos-barber-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: barber
+      POSTGRES_PASSWORD: barber_dev
+      POSTGRES_DB: turnos_barber
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U barber -d turnos_barber"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
