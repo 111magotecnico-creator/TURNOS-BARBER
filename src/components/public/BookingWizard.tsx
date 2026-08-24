@@ -132,7 +132,7 @@ export function BookingWizard() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="mx-auto max-w-2xl overflow-hidden">
       {/* Stepper */}
       <ol className="mb-6 flex items-center gap-1 overflow-x-auto pb-1 text-[11px] font-semibold sm:text-xs">
         {STEPS.map((label, i) => {
@@ -398,7 +398,7 @@ function SelectableCard({
     <button
       type="button"
       onClick={onClick}
-      className={`flex w-full items-center gap-3.5 rounded-card border p-4 text-left transition active:scale-[.99] ${
+      className={`flex w-full items-center gap-3 overflow-hidden rounded-card border p-4 text-left transition active:scale-[.99] ${
         selected
           ? "border-accent bg-accent/10"
           : "border-line bg-surface hover:border-line-strong"
@@ -413,14 +413,14 @@ function SelectableCard({
           {initials}
         </span>
       )}
-      {emoji && <span className="text-2xl">{emoji}</span>}
-      <span className="min-w-0 flex-1">
+      {emoji && <span className="shrink-0 text-2xl">{emoji}</span>}
+      <span className="min-w-0 flex-1 truncate">
         <span className="block font-bold">{title}</span>
         {subtitle && (
           <span className="mt-0.5 block truncate text-xs text-muted">{subtitle}</span>
         )}
       </span>
-      {right}
+      {right && <span className="shrink-0">{right}</span>}
     </button>
   );
 }
