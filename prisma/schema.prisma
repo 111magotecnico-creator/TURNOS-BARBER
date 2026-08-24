@@ -149,7 +149,7 @@ model Customer {
 // ── Configuración de la barbería (fila única) ────────────────────
 model Settings {
   id                String   @id @default("default")
-  shopName          String   @default("BARBER STUDIO")
+  shopName          String   @default("BARBERS")
   address           String   @default("")
   phone             String   @default("")
   whatsapp          String // formato internacional sin "+", ej: 5491155555555

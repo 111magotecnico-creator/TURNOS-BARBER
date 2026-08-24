@@ -10,7 +10,7 @@ export async function getSettings() {
   let s = await prisma.settings.findUnique({ where: { id: "default" } });
   if (!s) {
     s = await prisma.settings.create({
-      data: { id: "default", shopName: "BARBER STUDIO", whatsapp: "" },
+      data: { id: "default", shopName: "BARBERS", whatsapp: "" },
     });
   }
   return s;

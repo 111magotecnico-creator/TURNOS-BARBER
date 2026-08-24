@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "BARBER STUDIO · Reservá tu turno online",
+  title: "BARBERS · Reservá tu turno online",
   description:
-    "Reservá tu turno en BARBER STUDIO 24/7. Elegí servicio, barbero, fecha y horario en segundos.",
+    "Reservá tu turno en BARBERS 24/7. Elegí servicio, barbero, fecha y horario en segundos.",
 };
 
 export default function RootLayout({

@@ -48,7 +48,7 @@ function LoginForm() {
           <span className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-accent text-2xl text-accent-ink">
             ✂
           </span>
-          <h1 className="text-xl font-extrabold tracking-wide">BARBER STUDIO</h1>
+          <h1 className="text-xl font-extrabold tracking-wide">BARBERS</h1>
           <p className="mt-1 text-sm text-muted">Panel de administración</p>
         </div>
 

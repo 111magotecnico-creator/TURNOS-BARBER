@@ -1,5 +1,5 @@
 /**
- * Seed inicial — datos demo de BARBER STUDIO.
+ * Seed inicial — datos demo de BARBERS.
  * Ejecutar: npm run db:seed
  *
  * Idempotente: borra los datos demo antes de insertar.
@@ -23,7 +23,7 @@ function wh(barberId: string, days: number[], startMin: number, endMin: number) 
 }
 
 async function main() {
-  console.log("🌱 Seeding BARBER STUDIO...");
+  console.log("🌱 Seeding BARBERS...");
 
   // ── Limpieza (orden por dependencias) ──────────────────────
   await prisma.payment.deleteMany();
@@ -41,7 +41,7 @@ async function main() {
   await prisma.settings.create({
     data: {
       id: "default",
-      shopName: "BARBER STUDIO",
+      shopName: "BARBERS",
       address: "Av. Siempre Viva 742, Buenos Aires",
       phone: "+54 9 11 5555-1234",
       whatsapp: "5491155551234",

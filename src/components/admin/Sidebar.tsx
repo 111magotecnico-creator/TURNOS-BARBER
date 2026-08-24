@@ -61,7 +61,7 @@ export function Sidebar({ userName }: { userName: string }) {
         >
           ☰
         </button>
-        <span className="text-sm font-extrabold tracking-widest">BARBER STUDIO</span>
+        <span className="text-sm font-extrabold tracking-widest">BARBERS</span>
         <span className="w-9" />
       </div>
 
@@ -109,7 +109,7 @@ function SidebarHeader({
         <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-accent-ink">
           ✂
         </span>
-        BARBER STUDIO
+        BARBERS
       </p>
       <div className="mt-3 flex items-center justify-between">
         <span className="truncate text-xs text-muted">👤 {userName}</span>

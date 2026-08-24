@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { BookingWizard } from "@/components/public/BookingWizard";
 
 export const metadata: Metadata = {
-  title: "Reservar turno · BARBER STUDIO",
+  title: "Reservar turno · BARBERS",
 };
 
 export default function ReservarPage() {
