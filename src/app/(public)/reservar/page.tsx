@@ -13,10 +13,10 @@ export const metadata: Metadata = {
 
 export default function ReservarPage() {
   return (
-    <div className="mx-auto max-w-2xl overflow-hidden px-4 py-10">
-      <header className="mb-8 text-center">
-        <h1 className="text-3xl font-extrabold">Reservá tu turno</h1>
-        <p className="mt-1.5 text-sm text-muted">
+    <div className="mx-auto max-w-2xl overflow-hidden px-3 py-4 sm:px-4 sm:py-10">
+      <header className="mb-4 text-center sm:mb-8">
+        <h1 className="text-2xl font-extrabold sm:text-3xl">Reservá tu turno</h1>
+        <p className="mt-1 text-xs text-muted sm:mt-1.5 sm:text-sm">
           6 pasos, menos de un minuto. Sin cuenta, sin llamadas.
         </p>
       </header>

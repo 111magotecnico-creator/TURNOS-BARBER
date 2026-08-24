@@ -38,8 +38,8 @@ export default async function PublicLayout({
 
       <main className="flex-1">{children}</main>
 
-      <footer id="info" className="border-t border-line py-10">
-        <div className="mx-auto grid max-w-5xl gap-8 px-4 text-sm sm:grid-cols-3">
+      <footer id="info" className="border-t border-line py-6 sm:py-10">
+        <div className="mx-auto grid max-w-5xl gap-6 px-4 text-sm sm:grid-cols-3 sm:gap-8">
           <div>
             <p className="mb-2 font-bold tracking-widest">{settings.shopName}</p>
             <p className="text-muted">{settings.address}</p>

@@ -134,17 +134,17 @@ export function BookingWizard() {
   return (
     <div className="mx-auto max-w-2xl overflow-hidden">
       {/* Stepper */}
-      <ol className="mb-6 flex items-center gap-1 overflow-x-auto pb-1 text-[11px] font-semibold sm:text-xs">
+      <ol className="mb-4 flex items-center gap-0.5 overflow-x-auto pb-1 text-[10px] font-semibold sm:mb-6 sm:gap-1 sm:text-xs">
         {STEPS.map((label, i) => {
           const n = i + 1;
           const done = step > n;
           const current = step === n;
           return (
-            <li key={label} className="flex items-center gap-1 whitespace-nowrap">
+            <li key={label} className="flex items-center gap-0.5 whitespace-nowrap sm:gap-1">
               <button
                 type="button"
                 onClick={() => n < step && setStep(n)}
-                className={`flex h-7 w-7 items-center justify-center rounded-full border transition ${
+                className={`flex h-6 w-6 items-center justify-center rounded-full border transition sm:h-7 sm:w-7 ${
                   current
                     ? "border-accent bg-accent text-accent-ink"
                     : done
@@ -156,7 +156,7 @@ export function BookingWizard() {
                 {done ? "✓" : n}
               </button>
               <span className={current ? "text-ink" : "text-muted"}>{label}</span>
-              {n < STEPS.length && <span className="mx-1 text-line-strong">—</span>}
+              {n < STEPS.length && <span className="mx-0.5 text-line-strong sm:mx-1">—</span>}
             </li>
           );
         })}
@@ -168,7 +168,7 @@ export function BookingWizard() {
           {loadingS ? (
             <Spinner label="Cargando servicios..." />
           ) : (
-            <div className="grid gap-2.5">
+            <div className="grid gap-2 sm:gap-2.5">
               {services?.map((s) => (
                 <SelectableCard
                   key={s.id}
@@ -181,7 +181,7 @@ export function BookingWizard() {
                       <p className="font-extrabold text-accent">
                         {formatMoney(s.price, settings?.currency)}
                       </p>
-                      <p className="text-xs text-muted">{s.durationMin} min</p>
+                      <p className="text-[10px] text-muted sm:text-xs">{s.durationMin} min</p>
                     </div>
                   }
                 />
@@ -371,7 +371,7 @@ export function BookingWizard() {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <h2 className="mb-4 text-lg font-bold">{title}</h2>
+      <h2 className="mb-3 text-base font-bold sm:mb-4 sm:text-lg">{title}</h2>
       {children}
     </div>
   );
@@ -398,7 +398,7 @@ function SelectableCard({
     <button
       type="button"
       onClick={onClick}
-      className={`flex w-full items-center gap-3 overflow-hidden rounded-card border p-4 text-left transition active:scale-[.99] ${
+      className={`flex w-full items-center gap-2.5 overflow-hidden rounded-card border p-3 text-left transition active:scale-[.99] sm:gap-3 sm:p-4 ${
         selected
           ? "border-accent bg-accent/10"
           : "border-line bg-surface hover:border-line-strong"
