@@ -64,8 +64,14 @@ body {
 html, body {
   overflow-x: hidden;
   max-width: 100vw;
+  width: 100%;
 }
 
 * {
   box-sizing: border-box;
+}
+
+/* Forzar que ningún elemento se desborde */
+img, video, svg, button, input, textarea, select {
+  max-width: 100%;
 }

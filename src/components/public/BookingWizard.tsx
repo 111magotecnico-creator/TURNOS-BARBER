@@ -132,7 +132,7 @@ export function BookingWizard() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl overflow-hidden">
+    <div className="w-full max-w-full overflow-hidden">
       {/* Stepper */}
       <ol className="mb-4 flex items-center gap-0.5 overflow-x-auto pb-1 text-[10px] font-semibold sm:mb-6 sm:gap-1 sm:text-xs">
         {STEPS.map((label, i) => {
