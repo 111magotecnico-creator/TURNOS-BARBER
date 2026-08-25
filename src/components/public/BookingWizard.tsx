@@ -170,21 +170,30 @@ export function BookingWizard() {
           ) : (
             <div className="grid gap-2 sm:gap-2.5">
               {services?.map((s) => (
-                <SelectableCard
+                <button
                   key={s.id}
-                  selected={s.id === serviceId}
+                  type="button"
                   onClick={() => { setServiceId(s.id); setStep(2); }}
-                  title={s.name}
-                  subtitle={s.description ?? undefined}
-                  right={
-                    <div className="text-right">
+                  style={{ width: "100%", overflow: "hidden" }}
+                  className={`rounded-card border p-3 text-left transition active:scale-[.99] sm:p-4 ${
+                    s.id === serviceId
+                      ? "border-accent bg-accent/10"
+                      : "border-line bg-surface hover:border-line-strong"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-bold">{s.name}</p>
+                      <p className="mt-0.5 text-xs text-muted line-clamp-2">{s.description}</p>
+                    </div>
+                    <div className="shrink-0 text-right">
                       <p className="font-extrabold text-accent">
                         {formatMoney(s.price, settings?.currency)}
                       </p>
                       <p className="text-[10px] text-muted sm:text-xs">{s.durationMin} min</p>
                     </div>
-                  }
-                />
+                  </div>
+                </button>
               ))}
             </div>
           )}
