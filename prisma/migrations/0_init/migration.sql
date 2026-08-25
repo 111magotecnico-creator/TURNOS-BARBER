@@ -38,6 +38,7 @@ CREATE TABLE "Service" (
     "imageUrl" TEXT,
     "active" BOOLEAN NOT NULL DEFAULT true,
     "sortOrder" INTEGER NOT NULL DEFAULT 0,
+    "depositPercent" INTEGER,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     CONSTRAINT "Service_pkey" PRIMARY KEY ("id")
@@ -62,6 +63,7 @@ CREATE TABLE "Appointment" (
     "source" TEXT NOT NULL DEFAULT 'PUBLIC',
     "reminder24hAt" TIMESTAMP(3),
     "reminder1hAt" TIMESTAMP(3),
+    "expiresAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     CONSTRAINT "Appointment_pkey" PRIMARY KEY ("id")
@@ -114,7 +116,7 @@ CREATE TABLE "Customer" (
 -- CreateTable
 CREATE TABLE "Settings" (
     "id" TEXT NOT NULL DEFAULT 'default',
-    "shopName" TEXT NOT NULL DEFAULT 'BARBER STUDIO',
+    "shopName" TEXT NOT NULL DEFAULT 'BARBERS',
     "address" TEXT NOT NULL DEFAULT '',
     "phone" TEXT NOT NULL DEFAULT '',
     "whatsapp" TEXT NOT NULL,
@@ -126,6 +128,7 @@ CREATE TABLE "Settings" (
     "depositEnabled" BOOLEAN NOT NULL DEFAULT false,
     "depositPercent" INTEGER NOT NULL DEFAULT 0,
     "paymentMode" TEXT NOT NULL DEFAULT 'ON_SITE',
+    "paymentExpirationMin" INTEGER NOT NULL DEFAULT 10,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     CONSTRAINT "Settings_pkey" PRIMARY KEY ("id")
 );
@@ -139,6 +142,10 @@ CREATE TABLE "Payment" (
     "amount" INTEGER NOT NULL,
     "status" TEXT NOT NULL DEFAULT 'PENDING',
     "externalId" TEXT,
+    "preferenceId" TEXT,
+    "paymentMethod" TEXT,
+    "paidAt" TIMESTAMP(3),
+    "currency" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     CONSTRAINT "Payment_pkey" PRIMARY KEY ("id")
@@ -156,6 +163,8 @@ CREATE UNIQUE INDEX "DayOff_barberId_date_key" ON "DayOff"("barberId", "date");
 CREATE INDEX "BlockedSlot_barberId_date_idx" ON "BlockedSlot"("barberId", "date");
 CREATE UNIQUE INDEX "Customer_phone_key" ON "Customer"("phone");
 CREATE UNIQUE INDEX "Payment_appointmentId_key" ON "Payment"("appointmentId");
+CREATE INDEX "Payment_externalId_idx" ON "Payment"("externalId");
+CREATE INDEX "Payment_preferenceId_idx" ON "Payment"("preferenceId");
 
 -- AddForeignKey
 ALTER TABLE "User" ADD CONSTRAINT "User_barberId_fkey" FOREIGN KEY ("barberId") REFERENCES "Barber"("id") ON DELETE SET NULL ON UPDATE CASCADE;
