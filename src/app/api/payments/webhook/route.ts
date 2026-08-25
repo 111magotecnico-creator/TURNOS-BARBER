@@ -120,7 +120,6 @@ export async function POST(req: Request) {
           data: {
             status: "APPROVED",
             externalId: String(payment.id),
-            preferenceId: payment.external_reference ?? undefined,
             paymentMethod: payment.payment_method_id ?? null,
             paidAt: payment.date_approved ? new Date(payment.date_approved) : new Date(),
             currency: payment.currency_id,
