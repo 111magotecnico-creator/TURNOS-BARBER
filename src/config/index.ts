@@ -27,10 +27,11 @@ export const WEEKDAYS = [
 ] as const;
 
 export const APPOINTMENT_STATUS = {
-  PENDING: "PENDING",
+  PENDING_PAYMENT: "PENDING_PAYMENT",
   CONFIRMED: "CONFIRMED",
   COMPLETED: "COMPLETED",
   CANCELLED: "CANCELLED",
+  EXPIRED: "EXPIRED",
 } as const;
 
 export type AppointmentStatus =
@@ -38,7 +39,7 @@ export type AppointmentStatus =
 
 /** Estados que ocupan lugar en la agenda (bloquean el slot). */
 export const BLOCKING_STATUSES: string[] = [
-  APPOINTMENT_STATUS.PENDING,
+  APPOINTMENT_STATUS.PENDING_PAYMENT,
   APPOINTMENT_STATUS.CONFIRMED,
 ];
 
@@ -47,6 +48,16 @@ export const PAYMENT_MODES = {
   DEPOSIT: "DEPOSIT",
   ON_SITE: "ON_SITE",
 } as const;
+
+export const PAYMENT_STATUS = {
+  PENDING: "PENDING",
+  APPROVED: "APPROVED",
+  REJECTED: "REJECTED",
+  REFUNDED: "REFUNDED",
+} as const;
+
+export type PaymentStatus =
+  (typeof PAYMENT_STATUS)[keyof typeof PAYMENT_STATUS];
 
 /** Longitud del código público de turno (ej: A7X3K9). */
 export const CODE_LENGTH = 6;

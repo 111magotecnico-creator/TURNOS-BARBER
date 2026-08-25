@@ -16,7 +16,7 @@ export const minuteSchema = z
   .min(0)
   .max(1440);
 
-export const statusSchema = z.enum(["PENDING", "CONFIRMED", "COMPLETED", "CANCELLED"]);
+export const statusSchema = z.enum(["PENDING_PAYMENT", "CONFIRMED", "COMPLETED", "CANCELLED", "EXPIRED"]);
 
 // ── Auth ──────────────────────────────────────────────────────
 export const loginSchema = z.object({
@@ -164,4 +164,5 @@ export const settingsUpdateSchema = z.object({
   depositEnabled: z.boolean().optional(),
   depositPercent: z.number().int().min(0).max(100).optional(),
   paymentMode: z.enum(["FULL", "DEPOSIT", "ON_SITE"]).optional(),
+  paymentExpirationMin: z.number().int().min(1).max(60).optional(),
 });

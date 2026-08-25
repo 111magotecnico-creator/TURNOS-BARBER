@@ -10,8 +10,8 @@ import { apiFetch } from "@/lib/client";
 import type { SettingsDTO } from "@/types";
 
 // ═════════════════════════════════════════════════════════
-// CONFIGURACIÓN — datos del local + reglas de agenda.
-// Un solo registro en DB (id=1); los cambios impactan al
+// CONFIGURACIÓN — datos del local + reglas de agenda + pagos.
+// Un solo registro en DB (id=default); los cambios impactan al
 // instante en la web pública y el motor de disponibilidad.
 // ═════════════════════════════════════════════════════════
 
@@ -28,6 +28,7 @@ export default function ConfiguracionPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [mpStatus, setMpStatus] = useState<"loading" | "connected" | "disconnected">("loading");
 
   // ── Reiniciar agenda ──
   const { data: resetData } = useApi<{ count: number }>("/api/admin/reset-agenda");
@@ -40,6 +41,13 @@ export default function ConfiguracionPage() {
   useEffect(() => {
     if (data && !form) setForm(data);
   }, [data, form]);
+
+  // Verificar estado de MercadoPago
+  useEffect(() => {
+    apiFetch<{ configured: boolean }>("/api/settings/mp-status")
+      .then((r) => setMpStatus(r.configured ? "connected" : "disconnected"))
+      .catch(() => setMpStatus("disconnected"));
+  }, []);
 
   if (loading || !form) return <Spinner label="Cargando configuración..." />;
 
@@ -69,6 +77,7 @@ export default function ConfiguracionPage() {
           depositEnabled: form.depositEnabled,
           depositPercent: Number(form.depositPercent),
           paymentMode: form.paymentMode,
+          paymentExpirationMin: Number(form.paymentExpirationMin),
         },
       });
       setMsg("Configuración guardada ✓");
@@ -160,10 +169,36 @@ export default function ConfiguracionPage() {
 
         {/* Pagos */}
         <section className="rounded-card border border-line bg-surface p-5">
-          <h2 className="mb-1 font-bold">💳 Pagos</h2>
-          <p className="mb-4 text-xs text-muted">
-            Requiere MERCADOPAGO_ACCESS_TOKEN en .env para cobros online reales
-          </p>
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="font-bold">💳 Pagos — MercadoPago</h2>
+              <p className="text-xs text-muted">Configuración de cobros online</p>
+            </div>
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${
+                mpStatus === "connected"
+                  ? "bg-success/15 text-success"
+                  : mpStatus === "loading"
+                    ? "bg-accent/15 text-accent"
+                    : "bg-danger/15 text-danger"
+              }`}
+            >
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  mpStatus === "connected"
+                    ? "bg-success"
+                    : mpStatus === "loading"
+                      ? "bg-accent animate-pulse"
+                      : "bg-danger"
+                }`}
+              />
+              {mpStatus === "connected"
+                ? "Conectado"
+                : mpStatus === "loading"
+                  ? "Verificando..."
+                  : "Sin configurar"}
+            </span>
+          </div>
           <div className="grid gap-3.5">
             <Field label="Modo">
               <select
@@ -186,9 +221,19 @@ export default function ConfiguracionPage() {
               />
             </label>
             {form.depositEnabled && (
-              <Field label="Porcentaje de seña (%)">
-                <Input type="number" min={0} max={100} value={form.depositPercent} onChange={(e) => set("depositPercent", Number(e.target.value))} />
-              </Field>
+              <>
+                <Field label="Porcentaje de seña general (%)" hint="Se aplica si el servicio no tiene % propio">
+                  <Input type="number" min={0} max={100} value={form.depositPercent} onChange={(e) => set("depositPercent", Number(e.target.value))} />
+                </Field>
+                <Field label="Tiempo límite para pagar (minutos)" hint="Si no paga en este tiempo, la reserva expira">
+                  <Input type="number" min={1} max={60} value={form.paymentExpirationMin} onChange={(e) => set("paymentExpirationMin", Number(e.target.value))} />
+                </Field>
+              </>
+            )}
+            {form.depositEnabled && mpStatus === "disconnected" && (
+              <p className="rounded-xl border border-accent/40 bg-accent/10 px-3 py-2 text-xs text-accent">
+                Para cobros online, agregá MERCADOPAGO_ACCESS_TOKEN en las variables de entorno de Vercel.
+              </p>
             )}
           </div>
         </section>

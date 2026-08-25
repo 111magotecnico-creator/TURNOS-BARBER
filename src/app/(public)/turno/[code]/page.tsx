@@ -54,6 +54,7 @@ export default function TurnoPage({
   const [mode, setMode] = useState<Mode>("view");
   const [newDate, setNewDate] = useState<string | null>(null);
   const [newSlot, setNewSlot] = useState<Slot | null>(null);
+  const [retrying, setRetrying] = useState(false);
 
   const { data: settings } = useSettingsSafe();
 
@@ -118,6 +119,22 @@ export default function TurnoPage({
       setActionError((e as Error).message);
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function retryPayment() {
+    setRetrying(true);
+    setActionError(null);
+    try {
+      const result = await apiFetch<{ initPoint: string }>(
+        "/api/payments/retry",
+        { method: "POST", json: { appointmentCode: code } }
+      );
+      window.location.href = result.initPoint;
+    } catch (e) {
+      setActionError((e as Error).message);
+    } finally {
+      setRetrying(false);
     }
   }
 
@@ -237,6 +254,52 @@ export default function TurnoPage({
                 </p>
               )}
             </>
+          ) : appt.status === "PENDING_PAYMENT" ? (
+            /* ── TURNO PENDIENTE DE PAGO ── */
+            <div className="grid gap-3">
+              <Card className="border-accent/30 bg-accent/5">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">💳</span>
+                  <div>
+                    <p className="font-bold text-accent">Pago pendiente</p>
+                    <p className="text-xs text-muted">
+                      Completá el pago para confirmar tu turno. Si no pagás en los próximos minutos, la reserva expirará automáticamente.
+                    </p>
+                  </div>
+                </div>
+              </Card>
+              <Button
+                size="lg"
+                fullWidth
+                onClick={retryPayment}
+                loading={retrying}
+              >
+                💳 PAGAR AHORA
+              </Button>
+              <Button variant="ghost" fullWidth onClick={cancel}>
+                Cancelar reserva
+              </Button>
+            </div>
+          ) : appt.status === "EXPIRED" ? (
+            /* ── TURNO EXPIRADO ── */
+            <div className="grid gap-3">
+              <Card className="border-danger/30 bg-danger/5">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">⏰</span>
+                  <div>
+                    <p className="font-bold text-danger">Reserva expirada</p>
+                    <p className="text-xs text-muted">
+                      No se completó el pago a tiempo y la reserva fue liberada.
+                    </p>
+                  </div>
+                </div>
+              </Card>
+              <Link href="/reservar">
+                <Button size="lg" fullWidth>
+                  Reservar un nuevo turno →
+                </Button>
+              </Link>
+            </div>
           ) : (
             <p className="rounded-card border border-dashed border-line py-6 text-center text-sm text-muted">
               Este turno está {appt.status === "CANCELLED" ? "cancelado" : "completado"}.

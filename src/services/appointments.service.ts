@@ -24,6 +24,7 @@ import {
   isMercadoPagoConfigured,
   createMercadoPagoPreference,
   resolveAmount,
+  resolveDepositPercent,
 } from "@/lib/payments";
 
 // ═════════════════════════════════════════════════════════
@@ -138,7 +139,7 @@ async function generateUniqueCode(db: Db): Promise<string> {
   throw new HttpError(500, "No se pudo generar el código del turno");
 }
 
-function messageData(a: AppointmentFull, shopName: string) {
+function messageData(a: AppointmentFull, shopName: string, depositAmount?: number, remainingBalance?: number) {
   return {
     shopName,
     customerName: a.customerName,
@@ -150,6 +151,8 @@ function messageData(a: AppointmentFull, shopName: string) {
     price: a.service.price,
     currency: undefined as string | undefined,
     manageUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/turno/${a.code}`,
+    depositAmount,
+    remainingBalance,
   };
 }
 
@@ -167,8 +170,9 @@ export interface BookingInput {
 }
 
 export interface BookingResult {
-  /** Si hay pago online, appointment es null — se crea después del pago */
-  appointment: AppointmentFull | null;
+  /** Turno creado (PENDING_PAYMENT o CONFIRMED según el caso) */
+  appointment: AppointmentFull;
+  /** Datos del pago online (solo si hay redirección a MP) */
   payment: {
     preferenceId: string;
     initPoint: string;
@@ -190,22 +194,106 @@ export async function createBooking(input: BookingInput): Promise<BookingResult>
     settings.paymentMode !== "ON_SITE" &&
     mpConfigured;
 
-  // ── PAGO ONLINE: solo crear preferencia MP, NADA en la DB ──
-  if (needsOnlinePayment) {
-    const paymentAmount = resolveAmount(
-      settings.paymentMode,
-      service.price,
-      settings.depositPercent
-    );
+  // Calcular monto de seña con % propio del servicio si existe
+  const serviceDepositPct = (service as Service & { depositPercent: number | null }).depositPercent;
+  const effectiveDepositPct = resolveDepositPercent(serviceDepositPct, settings.depositPercent);
+  const paymentAmount = needsOnlinePayment
+    ? resolveAmount(settings.paymentMode, service.price, settings.depositPercent, serviceDepositPct)
+    : 0;
 
+  // ── PAGO ONLINE: crear turno PENDING_PAYMENT + preferencia MP ──
+  if (needsOnlinePayment) {
+    const created = await prisma.$transaction(async (tx) => {
+      const endMin = input.startMin + service.durationMin;
+      const phone = normalizePhone(input.customerPhone);
+
+      let candidates = await tx.barber.findMany({
+        where: { active: true },
+        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      });
+      if (input.barberId && input.barberId !== "any") {
+        candidates = candidates.filter((b) => b.id === input.barberId);
+        if (candidates.length === 0) {
+          throw new HttpError(400, "El barbero no está disponible");
+        }
+      }
+
+      for (const barber of candidates) {
+        const key: SlotKey = {
+          barberId: barber.id,
+          date: input.date,
+          startMin: input.startMin,
+          endMin,
+        };
+        try {
+          await assertSlotBookable(tx, key, settings);
+        } catch (err) {
+          if (candidates.length > 1 && err instanceof HttpError && err.status !== 400) {
+            continue;
+          }
+          if (candidates.length > 1) continue;
+          throw err;
+        }
+
+        const customer = await tx.customer.upsert({
+          where: { phone },
+          update: { name: input.customerName },
+          create: {
+            phone,
+            name: input.customerName,
+            email: input.customerEmail || null,
+          },
+        });
+
+        // Crear turno como PENDING_PAYMENT (bloquea el slot)
+        const appointment = await tx.appointment.create({
+          data: {
+            code: await generateUniqueCode(tx),
+            status: APPOINTMENT_STATUS.PENDING_PAYMENT,
+            date: input.date,
+            startMin: input.startMin,
+            endMin,
+            barberId: barber.id,
+            serviceId: service.id,
+            customerName: input.customerName,
+            customerPhone: phone,
+            customerEmail: input.customerEmail || null,
+            customerId: customer.id,
+            notes: input.notes || null,
+            source: "PUBLIC",
+            expiresAt: new Date(Date.now() + settings.paymentExpirationMin * 60 * 1000),
+          },
+          include: fullInclude,
+        });
+
+        // Crear registro de pago pendiente
+        await tx.payment.create({
+          data: {
+            appointmentId: appointment.id,
+            mode: settings.paymentMode,
+            amount: paymentAmount,
+            status: "PENDING",
+            currency: settings.currency,
+          },
+        });
+
+        return appointment;
+      }
+      throw new HttpError(
+        409,
+        "El horario acaba de ser reservado. Elegí otro horario."
+      );
+    }, TX_OPTS);
+
+    // Crear preferencia MP (fuera de la transacción)
     const pref = await createMercadoPagoPreference({
-      appointmentCode: "", // se llena después del pago
+      appointmentCode: created.code,
       title: `${service.name} — ${settings.shopName}`,
       unitPrice: paymentAmount,
       currency: settings.currency,
       payerEmail: input.customerEmail || null,
-      // Guardamos todos los datos de reserva en metadata
       metadata: {
+        appointmentCode: created.code,
         serviceId: input.serviceId,
         barberId: input.barberId ?? "any",
         date: input.date,
@@ -217,8 +305,28 @@ export async function createBooking(input: BookingInput): Promise<BookingResult>
       },
     });
 
+    // Actualizar preferenciaId en el pago
+    await prisma.payment.update({
+      where: { appointmentId: created.id },
+      data: { preferenceId: pref.id },
+    });
+
+    // Notificar pendiente
+    void notifyAppointment("pending", {
+      shopName: settings.shopName,
+      customerName: created.customerName,
+      customerPhone: created.customerPhone,
+      serviceName: service.name,
+      barberName: created.barber.name,
+      dateLong: formatDateLong(created.date),
+      time: minToTime(created.startMin),
+      price: paymentAmount,
+      currency: settings.currency,
+      manageUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/turno/${created.code}`,
+    });
+
     return {
-      appointment: null,
+      appointment: created,
       payment: {
         preferenceId: pref.id,
         initPoint: pref.initPoint,
@@ -289,16 +397,11 @@ export async function createBooking(input: BookingInput): Promise<BookingResult>
         include: fullInclude,
       });
 
-      const paymentAmount = resolveAmount(
-        settings.paymentMode,
-        service.price,
-        settings.depositPercent
-      );
       await tx.payment.create({
         data: {
           appointmentId: appointment.id,
           mode: settings.paymentMode,
-          amount: paymentAmount,
+          amount: resolveAmount(settings.paymentMode, service.price, settings.depositPercent, serviceDepositPct),
           status: "PENDING_ON_SITE",
         },
       });
@@ -315,110 +418,106 @@ export async function createBooking(input: BookingInput): Promise<BookingResult>
   return { appointment: created, payment: null };
 }
 
-// ── CONFIRMACIÓN POST-PAGO (usado por /api/payments/success) ──
+// ── CONFIRMACIÓN POST-PAGO (usado por /api/payments/webhook) ──
 
 export interface ConfirmPaymentInput {
-  serviceId: string;
-  barberId: string;
-  date: string;
-  startMin: number;
-  customerName: string;
-  customerPhone: string;
-  customerEmail?: string | null;
-  notes?: string | null;
+  appointmentCode: string;
   paymentExternalId: string;
   paymentAmount: number;
   paymentCurrency: string;
+  paymentMethod?: string;
 }
 
+/**
+ * Confirma un pago y actualiza el turno de PENDING_PAYMENT a CONFIRMED.
+ * Idempotente: si ya está CONFIRMADO, no hace nada.
+ */
 export async function confirmPaymentBooking(
   input: ConfirmPaymentInput
 ): Promise<AppointmentFull> {
   const settings = await getSettings();
 
-  const created = await prisma.$transaction(async (tx) => {
-    const service = await tx.service.findUnique({ where: { id: input.serviceId } });
-    if (!service || !service.active) {
-      throw new HttpError(400, "El servicio no está disponible");
-    }
-    const endMin = input.startMin + service.durationMin;
-    const phone = normalizePhone(input.customerPhone);
+  const appointment = await prisma.appointment.findUnique({
+    where: { code: input.appointmentCode },
+    include: fullInclude,
+  });
+  if (!appointment) {
+    throw new HttpError(404, "Turno no encontrado");
+  }
 
-    // Buscar barbero específico o asignar el primero disponible
-    let candidates = await tx.barber.findMany({
-      where: { active: true },
-      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-    });
-    if (input.barberId && input.barberId !== "any") {
-      candidates = candidates.filter((b) => b.id === input.barberId);
-    }
+  // Idempotencia: si ya está confirmado, retornar directamente
+  if (appointment.status === APPOINTMENT_STATUS.CONFIRMED) {
+    return appointment;
+  }
 
-    for (const barber of candidates) {
-      const key: SlotKey = {
-        barberId: barber.id,
-        date: input.date,
-        startMin: input.startMin,
-        endMin,
-      };
-      try {
-        await assertSlotBookable(tx, key, settings);
-      } catch (err) {
-        if (candidates.length > 1 && err instanceof HttpError && err.status !== 400) {
-          continue;
-        }
-        if (candidates.length > 1) continue;
-        throw err;
-      }
-
-      const customer = await tx.customer.upsert({
-        where: { phone },
-        update: { name: input.customerName },
-        create: {
-          phone,
-          name: input.customerName,
-          email: input.customerEmail || null,
-        },
-      });
-
-      const appointment = await tx.appointment.create({
-        data: {
-          code: await generateUniqueCode(tx),
-          status: APPOINTMENT_STATUS.CONFIRMED,
-          date: input.date,
-          startMin: input.startMin,
-          endMin,
-          barberId: barber.id,
-          serviceId: service.id,
-          customerName: input.customerName,
-          customerPhone: phone,
-          customerEmail: input.customerEmail || null,
-          customerId: customer.id,
-          notes: input.notes || null,
-          source: "PUBLIC",
-        },
-        include: fullInclude,
-      });
-
-      await tx.payment.create({
-        data: {
-          appointmentId: appointment.id,
-          mode: settings.paymentMode,
-          amount: input.paymentAmount,
-          status: "APPROVED",
-          externalId: input.paymentExternalId,
-        },
-      });
-
-      return appointment;
-    }
+  // Solo se pueden confirmar turnos PENDING_PAYMENT
+  if (appointment.status !== APPOINTMENT_STATUS.PENDING_PAYMENT) {
     throw new HttpError(
-      409,
-      "Ese horario ya fue reservado por otra persona durante el pago. Elegí otro horario."
+      400,
+      `El turno está en estado ${appointment.status} y no puede ser confirmado por pago`
     );
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    // Doble verificación dentro de transacción
+    const current = await tx.appointment.findUnique({
+      where: { id: appointment.id },
+      include: { payment: true },
+    });
+    if (current?.status === APPOINTMENT_STATUS.CONFIRMED) {
+      return appointment as AppointmentFull;
+    }
+
+    // Actualizar pago
+    await tx.payment.update({
+      where: { appointmentId: appointment.id },
+      data: {
+        status: "APPROVED",
+        externalId: input.paymentExternalId,
+        paymentMethod: input.paymentMethod ?? null,
+        paidAt: new Date(),
+        currency: input.paymentCurrency,
+      },
+    });
+
+    // Actualizar turno a CONFIRMED
+    return tx.appointment.update({
+      where: { id: appointment.id },
+      data: {
+        status: APPOINTMENT_STATUS.CONFIRMED,
+        expiresAt: null, // limpiar expiración
+      },
+      include: fullInclude,
+    });
   }, TX_OPTS);
 
-  void notifyAppointment("confirmed", messageData(created, settings.shopName));
-  return created;
+  // Calcular info de seña para WhatsApp
+  const service = await prisma.service.findUnique({ where: { id: appointment.serviceId } });
+  const serviceDepositPct = service && (service as Service & { depositPercent: number | null }).depositPercent;
+  const depositAmount = resolveAmount(
+    settings.paymentMode,
+    service?.price ?? 0,
+    settings.depositPercent,
+    serviceDepositPct
+  );
+  const remaining = (service?.price ?? 0) - depositAmount;
+
+  void notifyAppointment("confirmed", {
+    shopName: settings.shopName,
+    customerName: updated.customerName,
+    customerPhone: updated.customerPhone,
+    serviceName: updated.service.name,
+    barberName: updated.barber.name,
+    dateLong: formatDateLong(updated.date),
+    time: minToTime(updated.startMin),
+    price: service?.price,
+    currency: settings.currency,
+    manageUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/turno/${updated.code}`,
+    depositAmount,
+    remainingBalance: remaining > 0 ? remaining : undefined,
+  });
+
+  return updated;
 }
 
 // ── GESTIÓN POR CÓDIGO (cliente sin cuenta) ───────────────────
@@ -560,7 +659,7 @@ export interface AdminUpdatePatch {
   customerPhone?: string;
   customerEmail?: string | null;
   notes?: string | null;
-  status?: "PENDING" | "CONFIRMED" | "COMPLETED" | "CANCELLED";
+  status?: "PENDING_PAYMENT" | "CONFIRMED" | "COMPLETED" | "CANCELLED" | "EXPIRED";
   cancelReason?: string;
 }
 
@@ -636,4 +735,109 @@ export async function hardDelete(id: string) {
   const a = await prisma.appointment.delete({ where: { id } }).catch(() => null);
   if (!a) throw new HttpError(404, "Turno no encontrado");
   return { deleted: true };
+}
+
+// ── EXPIRACIÓN DE RESERVAS PENDING_PAYMENT ────────────────
+
+/**
+ * Expira turnos PENDING_PAYMENT cuya fecha de expiración ya pasó.
+ * Libera el slot para que otro cliente pueda reservarlo.
+ * Retorna la cantidad de turnos expirados.
+ */
+export async function expireOverdueAppointments(): Promise<number> {
+  const now = new Date();
+  const expired = await prisma.appointment.updateMany({
+    where: {
+      status: APPOINTMENT_STATUS.PENDING_PAYMENT,
+      expiresAt: { lt: now },
+    },
+    data: {
+      status: APPOINTMENT_STATUS.EXPIRED,
+    },
+  });
+
+  if (expired.count > 0) {
+    console.log(`[EXPIRE] Expired ${expired.count} overdue PENDING_PAYMENT appointments`);
+  }
+
+  return expired.count;
+}
+
+/**
+ * Reintenta el pago de un turno PENDING_PAYMENT.
+ * Retorna la nueva preferencia MP para que el cliente reintente.
+ */
+export async function retryPayment(appointmentCode: string): Promise<{
+  preferenceId: string;
+  initPoint: string;
+  amount: number;
+}> {
+  const settings = await getSettings();
+  const appointment = await prisma.appointment.findUnique({
+    where: { code: appointmentCode },
+    include: { service: true, payment: true },
+  });
+
+  if (!appointment) {
+    throw new HttpError(404, "Turno no encontrado");
+  }
+
+  if (appointment.status !== APPOINTMENT_STATUS.PENDING_PAYMENT) {
+    throw new HttpError(400, "Este turno no está pendiente de pago");
+  }
+
+  // Verificar que no haya expirado
+  if (appointment.expiresAt && appointment.expiresAt < new Date()) {
+    throw new HttpError(400, "Esta reserva expiró. Debes hacer una nueva reserva.");
+  }
+
+  if (!appointment.payment) {
+    throw new HttpError(500, "No se encontró el registro de pago");
+  }
+
+  // Recalcular monto (por si cambió el precio o el %)
+  const serviceDepositPct = (appointment.service as Service & { depositPercent: number | null }).depositPercent;
+  const paymentAmount = resolveAmount(
+    settings.paymentMode,
+    appointment.service.price,
+    settings.depositPercent,
+    serviceDepositPct
+  );
+
+  // Crear nueva preferencia MP
+  const pref = await createMercadoPagoPreference({
+    appointmentCode: appointment.code,
+    title: `${appointment.service.name} — ${settings.shopName}`,
+    unitPrice: paymentAmount,
+    currency: settings.currency,
+    payerEmail: appointment.customerEmail || null,
+    metadata: {
+      appointmentCode: appointment.code,
+      serviceId: appointment.serviceId,
+      barberId: appointment.barberId,
+      date: appointment.date,
+      startMin: appointment.startMin,
+      customerName: appointment.customerName,
+      customerPhone: appointment.customerPhone,
+      customerEmail: appointment.customerEmail ?? null,
+      notes: appointment.notes ?? null,
+    },
+  });
+
+  // Actualizar preferenciaId y extender expiración
+  await prisma.payment.update({
+    where: { appointmentId: appointment.id },
+    data: { preferenceId: pref.id },
+  });
+
+  await prisma.appointment.update({
+    where: { id: appointment.id },
+    data: { expiresAt: new Date(Date.now() + settings.paymentExpirationMin * 60 * 1000) },
+  });
+
+  return {
+    preferenceId: pref.id,
+    initPoint: pref.initPoint,
+    amount: paymentAmount,
+  };
 }

@@ -31,9 +31,11 @@ interface CreatedAppointment {
   endMin: number;
   barberName: string;
   serviceName: string;
+  servicePrice: number;
 }
 
-interface PaymentOnly {
+interface PaymentResponse {
+  appointment: CreatedAppointment;
   payment: {
     preferenceId: string;
     initPoint: string;
@@ -53,6 +55,7 @@ export function BookingWizard() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [created, setCreated] = useState<CreatedAppointment | null>(null);
+  const [paymentRedirecting, setPaymentRedirecting] = useState(false);
 
   const { data: services, loading: loadingS } = useApi<ServiceDTO[]>("/api/services");
   const { data: barbers } = useApi<BarberDTO[]>("/api/barbers");
@@ -82,7 +85,7 @@ export function BookingWizard() {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const result = await apiFetch<CreatedAppointment | PaymentOnly>(
+      const result = await apiFetch<CreatedAppointment | PaymentResponse>(
         "/api/appointments",
         {
           method: "POST",
@@ -97,6 +100,7 @@ export function BookingWizard() {
       );
       // Si la respuesta tiene payment.initPoint → redirigir a MP AHORA
       if ("payment" in result && result.payment.initPoint) {
+        setPaymentRedirecting(true);
         window.location.href = result.payment.initPoint;
         return;
       }
@@ -113,6 +117,24 @@ export function BookingWizard() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  // ── Pantalla de redirección a MercadoPago ──
+  if (paymentRedirecting) {
+    return (
+      <div className="mx-auto max-w-md py-16 text-center">
+        <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-accent/15 text-4xl animate-pulse">
+          💳
+        </div>
+        <h1 className="text-2xl font-extrabold">Redirigiendo a MercadoPago...</h1>
+        <p className="mt-3 text-sm text-muted">
+          Prepará tu tarjeta o metodo de pago. El pago es seguro y encriptado.
+        </p>
+        <p className="mt-2 text-xs text-muted">
+          Si no te redirige automáticamente, hacé click en el botón.
+        </p>
+      </div>
+    );
   }
 
   // ── Pantalla final ─────────────────────────────────────────
@@ -356,7 +378,10 @@ export function BookingWizard() {
             {settings?.depositEnabled &&
             settings.paymentMode !== "ON_SITE" &&
             settings.depositPercent > 0
-              ? "RESERVAR Y PAGAR SEÑA"
+              ? `RESERVAR Y PAGAR ${formatMoney(
+                  Math.max(1, Math.round((service.price * (settings.depositPercent)) / 100)),
+                  settings?.currency
+                )}`
               : "CONFIRMAR TURNO"}
           </Button>
         </Section>

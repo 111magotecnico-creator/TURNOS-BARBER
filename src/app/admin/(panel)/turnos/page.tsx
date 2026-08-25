@@ -7,18 +7,50 @@ import { EmptyState, Spinner } from "@/components/ui/States";
 import { useApi } from "@/hooks/useApi";
 import { apiFetch } from "@/lib/client";
 import { formatDateShort, formatMoney, todayStr } from "@/lib/utils";
-import type { AppointmentDTO, BarberDTO, SettingsDTO } from "@/types";
+import type { BarberDTO, SettingsDTO } from "@/types";
 
 // ═════════════════════════════════════════════════════════
 // TURNOS — historial completo con filtros por fecha/estado/
 // barbero/búsqueda de cliente. Acciones rápidas por fila.
+// Incluye información de pago para turnos online.
 // ═════════════════════════════════════════════════════════
 
 const STATUS_LABEL: Record<string, string> = {
+  PENDING_PAYMENT: "Pago pendiente",
   CONFIRMED: "Confirmado",
   COMPLETED: "Completado",
   CANCELLED: "Cancelado",
+  EXPIRED: "Expirado",
 };
+
+const PAYMENT_STATUS_LABEL: Record<string, string> = {
+  PENDING: "Pendiente",
+  APPROVED: "Aprobado",
+  REJECTED: "Rechazado",
+  REFUNDED: "Reembolsado",
+  PENDING_ON_SITE: "En local",
+};
+
+interface EnrichedAppointment {
+  id: string;
+  code: string;
+  status: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  customerName: string;
+  barberName: string;
+  serviceName: string;
+  servicePrice: number;
+  payment?: {
+    amount: number;
+    status: string;
+    mode: string;
+    externalId?: string | null;
+    paymentMethod?: string | null;
+    paidAt?: string | null;
+  } | null;
+}
 
 export default function TurnosPage() {
   const today = todayStr();
@@ -33,13 +65,13 @@ export default function TurnosPage() {
   if (barberId) params.set("barberId", barberId);
   if (q.trim()) params.set("q", q.trim());
 
-  const { data: appointments, loading, refresh } = useApi<AppointmentDTO[]>(
+  const { data: appointments, loading, refresh } = useApi<EnrichedAppointment[]>(
     `/api/appointments?${params.toString()}`
   );
   const { data: barbers } = useApi<BarberDTO[]>("/api/barbers");
   const { data: settings } = useApi<SettingsDTO>("/api/settings");
 
-  async function changeStatus(a: AppointmentDTO, next: string) {
+  async function changeStatus(a: EnrichedAppointment, next: string) {
     if (next === "CANCELLED" && !confirm(`¿Cancelar turno de ${a.customerName}?`)) return;
     await apiFetch(`/api/appointments/${a.id}`, {
       method: "PATCH",
@@ -108,6 +140,7 @@ export default function TurnosPage() {
                 <th className="px-3 py-2.5">Servicio</th>
                 <th className="hidden px-3 py-2.5 md:table-cell">Barbero</th>
                 <th className="px-3 py-2.5">Estado</th>
+                <th className="hidden px-3 py-2.5 sm:table-cell">Pago</th>
                 <th className="px-3 py-2.5"></th>
               </tr>
             </thead>
@@ -126,7 +159,29 @@ export default function TurnosPage() {
                   </td>
                   <td className="hidden px-3 py-2.5 md:table-cell">{a.barberName}</td>
                   <td className="px-3 py-2.5">
-                    <Badge status={a.status} label={STATUS_LABEL[a.status]} />
+                    <Badge status={a.status} label={STATUS_LABEL[a.status] ?? a.status} />
+                  </td>
+                  <td className="hidden px-3 py-2.5 sm:table-cell">
+                    {a.payment ? (
+                      <div className="text-xs">
+                        <span className={`font-medium ${
+                          a.payment.status === "APPROVED"
+                            ? "text-success"
+                            : a.payment.status === "REJECTED"
+                              ? "text-danger"
+                              : "text-muted"
+                        }`}>
+                          {PAYMENT_STATUS_LABEL[a.payment.status] ?? a.payment.status}
+                        </span>
+                        {a.payment.amount > 0 && (
+                          <span className="block text-muted">
+                            {formatMoney(a.payment.amount, settings?.currency)}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted">—</span>
+                    )}
                   </td>
                   <td className="px-3 py-2.5">
                     <div className="flex justify-end gap-1">
@@ -135,6 +190,9 @@ export default function TurnosPage() {
                           <IconBtn title="Completar" onClick={() => changeStatus(a, "COMPLETED")}>✓</IconBtn>
                           <IconBtn title="Cancelar turno" danger onClick={() => changeStatus(a, "CANCELLED")}>✕</IconBtn>
                         </>
+                      )}
+                      {a.status === "PENDING_PAYMENT" && (
+                        <IconBtn title="Cancelar reserva pendiente" danger onClick={() => changeStatus(a, "CANCELLED")}>✕</IconBtn>
                       )}
                     </div>
                   </td>

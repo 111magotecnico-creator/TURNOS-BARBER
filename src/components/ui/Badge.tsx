@@ -1,7 +1,9 @@
 const styles: Record<string, string> = {
+  PENDING_PAYMENT: "bg-accent/15 text-accent border-accent/30",
   CONFIRMED: "bg-accent/15 text-accent border-accent/30",
   COMPLETED: "bg-success/15 text-success border-success/30",
   CANCELLED: "bg-danger/15 text-danger border-danger/30",
+  EXPIRED: "bg-danger/10 text-danger border-danger/20",
 };
 
 export function Badge({

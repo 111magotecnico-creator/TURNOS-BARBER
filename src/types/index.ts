@@ -66,7 +66,7 @@ export interface WorkingHourDTO {
   active: boolean;
 }
 
-export type AppointmentStatusDTO = "PENDING" | "CONFIRMED" | "COMPLETED" | "CANCELLED";
+export type AppointmentStatusDTO = "PENDING_PAYMENT" | "CONFIRMED" | "COMPLETED" | "CANCELLED" | "EXPIRED";
 
 export interface AppointmentDTO {
   id: string;
@@ -104,4 +104,5 @@ export interface SettingsDTO {
   depositEnabled: boolean;
   depositPercent: number;
   paymentMode: string;
+  paymentExpirationMin: number;
 }

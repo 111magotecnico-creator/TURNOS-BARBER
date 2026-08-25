@@ -30,6 +30,7 @@ export async function updateSettings(
     depositEnabled: boolean;
     depositPercent: number;
     paymentMode: string;
+    paymentExpirationMin: number;
   }>
 ) {
   await getSettings();

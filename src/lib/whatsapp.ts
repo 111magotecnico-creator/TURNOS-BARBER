@@ -84,6 +84,8 @@ export interface AppointmentMessageData {
   price?: number;
   currency?: string;
   manageUrl?: string;
+  depositAmount?: number;
+  remainingBalance?: number;
 }
 
 export type NotificationKind =
@@ -127,11 +129,17 @@ function buildMessage(
         `📅 Fecha: ${d.dateLong}`,
         `⏰ Hora: ${d.time}`,
         ...(d.price
-          ? [`💰 Precio: ${formatMoney(d.price, d.currency)}`]
+          ? [`💰 Precio total: ${formatMoney(d.price, d.currency)}`]
+          : []),
+        ...(d.depositAmount
+          ? [`✅ Seña abonada: ${formatMoney(d.depositAmount, d.currency)}`]
+          : []),
+        ...(d.remainingBalance
+          ? [`💳 Saldo: ${formatMoney(d.remainingBalance, d.currency)}`]
           : []),
         ...(d.manageUrl ? [``, `Gestioná tu turno: ${d.manageUrl}`] : []),
         ``,
-        `Te esperamos.`,
+        `¡Te esperamos!`,
       ].join("\n");
     case "reminder24h":
       return [

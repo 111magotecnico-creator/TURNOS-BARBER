@@ -52,24 +52,25 @@ model Barber {
 
 // ── Servicios ────────────────────────────────────────────────────
 model Service {
-  id          String        @id @default(cuid())
-  name        String
-  description String?
-  price       Int // unidades enteras de la moneda configurada
-  durationMin Int
-  imageUrl    String?
-  active      Boolean       @default(true)
-  sortOrder   Int           @default(0)
-  appointment Appointment[]
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id             String        @id @default(cuid())
+  name           String
+  description    String?
+  price          Int // unidades enteras de la moneda configurada
+  durationMin    Int
+  imageUrl       String?
+  active         Boolean       @default(true)
+  sortOrder      Int           @default(0)
+  depositPercent Int?          // seña específica por servicio (null = usar % general)
+  appointment    Appointment[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 }
 
 // ── Turnos ───────────────────────────────────────────────────────
 model Appointment {
   id            String    @id @default(cuid())
   code          String    @unique // código público para gestionar sin cuenta
-  status        String    @default("CONFIRMED") // CONFIRMED | COMPLETED | CANCELLED
+  status        String    @default("CONFIRMED") // PENDING_PAYMENT | CONFIRMED | COMPLETED | CANCELLED | EXPIRED
   date          String // YYYY-MM-DD
   startMin      Int // minutos desde 00:00
   endMin        Int
@@ -87,6 +88,7 @@ model Appointment {
   source        String    @default("PUBLIC") // PUBLIC | ADMIN
   reminder24hAt DateTime? // anti-duplicado de recordatorios
   reminder1hAt  DateTime?
+  expiresAt     DateTime? // fecha/hora de expiración de reserva PENDING_PAYMENT
   payment       Payment?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -161,19 +163,27 @@ model Settings {
   depositEnabled    Boolean  @default(false)
   depositPercent    Int      @default(0)
   paymentMode       String   @default("ON_SITE") // FULL | DEPOSIT | ON_SITE
+  paymentExpirationMin Int  @default(10) // minutos antes de expirar reserva PENDING_PAYMENT
   updatedAt         DateTime @updatedAt
 }
 
-// ── Pagos (esqueleto Mercado Pago — NO implementa pagos falsos) ──
+// ── Pagos — integración Mercado Pago Checkout Pro ──
 model Payment {
-  id            String      @id @default(cuid())
-  appointmentId String      @unique
-  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
-  provider      String      @default("MERCADOPAGO")
-  mode          String // FULL | DEPOSIT | ON_SITE
-  amount        Int
-  status        String      @default("PENDING") // PENDING | APPROVED | REJECTED | REFUNDED
-  externalId    String? // id de la preferencia/pago en MP
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id              String      @id @default(cuid())
+  appointmentId   String      @unique
+  appointment     Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  provider        String      @default("MERCADOPAGO")
+  mode            String // FULL | DEPOSIT | ON_SITE
+  amount          Int
+  status          String      @default("PENDING") // PENDING | APPROVED | REJECTED | REFUNDED
+  externalId      String? // id del pago en MP (payment_id numérico)
+  preferenceId    String? // id de la preferencia MP
+  paymentMethod   String? // método de pago (visa, mastercard, cash, etc.)
+  paidAt          DateTime? // fecha/hora del pago aprobado
+  currency        String? // ARS, USD, etc.
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([externalId])
+  @@index([preferenceId])
 }
