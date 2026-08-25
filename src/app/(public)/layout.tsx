@@ -11,7 +11,7 @@ export default async function PublicLayout({
   const settings = await getSettings();
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex min-h-screen flex-col overflow-hidden">
       <header className="sticky top-0 z-40 border-b border-line bg-bg/85 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4">
           <Link href="/" className="group flex items-center gap-2.5">

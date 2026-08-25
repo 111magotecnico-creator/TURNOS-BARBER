@@ -61,10 +61,18 @@ body {
 }
 
 /* Mobile: prevenir overflow horizontal y zoom */
-html, body {
+html {
   overflow-x: hidden;
   max-width: 100vw;
   width: 100%;
+}
+
+body {
+  overflow-x: hidden;
+  max-width: 100vw;
+  width: 100%;
+  margin: 0;
+  padding: 0;
 }
 
 * {
@@ -74,4 +82,9 @@ html, body {
 /* Forzar que ningún elemento se desborde */
 img, video, svg, button, input, textarea, select {
   max-width: 100%;
+}
+
+/* Forzar que flex items no crezcan más allá del contenedor */
+.flex {
+  min-width: 0;
 }

@@ -132,7 +132,7 @@ export function BookingWizard() {
   }
 
   return (
-    <div className="w-full max-w-full overflow-hidden">
+    <div style={{ width: "100%", maxWidth: "100%", overflow: "hidden" }}>
       {/* Stepper */}
       <ol className="mb-4 flex items-center gap-0.5 overflow-x-auto pb-1 text-[10px] font-semibold sm:mb-6 sm:gap-1 sm:text-xs">
         {STEPS.map((label, i) => {
@@ -398,7 +398,8 @@ function SelectableCard({
     <button
       type="button"
       onClick={onClick}
-      className={`flex w-full items-center gap-2.5 overflow-hidden rounded-card border p-3 text-left transition active:scale-[.99] sm:gap-3 sm:p-4 ${
+      style={{ width: "100%", overflow: "hidden" }}
+      className={`flex items-center gap-2.5 rounded-card border p-3 text-left transition active:scale-[.99] sm:gap-3 sm:p-4 ${
         selected
           ? "border-accent bg-accent/10"
           : "border-line bg-surface hover:border-line-strong"
