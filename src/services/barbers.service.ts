@@ -91,6 +91,15 @@ export async function deleteBarber(id: string) {
   return { softDeleted: false };
 }
 
+/** Obtiene los horarios laborales de un barbero. */
+export async function getBarberWorkingHours(barberId: string) {
+  await ensureExists(barberId);
+  return prisma.workingHour.findMany({
+    where: { barberId },
+    orderBy: [{ weekday: "asc" }, { startMin: "asc" }],
+  });
+}
+
 /** Reemplaza TODA la configuración semanal de horarios del barbero. */
 export async function replaceWorkingHours(
   barberId: string,
