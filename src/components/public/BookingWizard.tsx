@@ -11,18 +11,10 @@ import { TimeSlots } from "./TimeSlots";
 import { useApi } from "@/hooks/useApi";
 import { apiFetch } from "@/lib/client";
 import {
-  addDaysStr,
   formatDateLong,
   formatMoney,
-  todayStr,
 } from "@/lib/utils";
 import type { BarberDTO, ServiceDTO, SettingsDTO, Slot } from "@/types";
-
-// ═════════════════════════════════════════════════════════
-// WIZARD DE RESERVA — flujo completo en 7 pasos.
-// Estado local simple y lineal: cada paso habilita el siguiente.
-// La validación final reutiliza el MISMO schema Zod del backend.
-// ═════════════════════════════════════════════════════════
 
 interface CreatedAppointment {
   code: string;
@@ -43,13 +35,13 @@ interface PaymentResponse {
   };
 }
 
-const STEPS = ["Servicio", "Barbero", "Fecha", "Horario", "Datos", "Confirmar"];
+const STEPS = ["Servicio", "Fecha", "Barbero", "Horario", "Datos", "Confirmar"];
 
 export function BookingWizard() {
   const [step, setStep] = useState(1);
   const [serviceId, setServiceId] = useState<string | null>(null);
-  const [barberId, setBarberId] = useState<string | null>(null);
   const [date, setDate] = useState<string | null>(null);
+  const [barberId, setBarberId] = useState<string | null>(null);
   const [slot, setSlot] = useState<Slot | null>(null);
   const [form, setForm] = useState({ customerName: "", customerPhone: "", customerEmail: "", notes: "" });
   const [submitting, setSubmitting] = useState(false);
@@ -60,32 +52,6 @@ export function BookingWizard() {
   const { data: services, loading: loadingS } = useApi<ServiceDTO[]>("/api/services");
   const { data: barbers } = useApi<BarberDTO[]>("/api/barbers");
   const { data: settings } = useApi<SettingsDTO>("/api/settings");
-
-  // Disponibilidad: se consulta solo cuando hay servicio + fecha
-  const availabilityUrl =
-    serviceId && date && step >= 4
-      ? `/api/availability?serviceId=${serviceId}&date=${date}&barberId=${barberId ?? "any"}`
-      : null;
-  const { data: availability, loading: loadingSlots, error: slotsError, refresh: refreshSlots } =
-    useApi<{ slots: Slot[]; durationMin: number }>(availabilityUrl);
-
-  // Consultar disponibilidad temprano para saber qué barberos trabajan ese día
-  const earlyAvailabilityUrl =
-    serviceId && date && step < 4
-      ? `/api/availability?serviceId=${serviceId}&date=${date}&barberId=any`
-      : null;
-  const { data: earlyAvailability } =
-    useApi<{ slots: Slot[]; durationMin: number }>(earlyAvailabilityUrl);
-
-  // Barberos que realmente trabajan la fecha seleccionada
-  const availableBarberIds = useMemo(() => {
-    if (!earlyAvailability?.slots) return null; // null = aún no se consultó
-    const ids = new Set<string>();
-    for (const slot of earlyAvailability.slots) {
-      for (const id of slot.barberIds) ids.add(id);
-    }
-    return ids;
-  }, [earlyAvailability]);
 
   const service = useMemo(
     () => services?.find((s) => s.id === serviceId) ?? null,
@@ -98,9 +64,34 @@ export function BookingWizard() {
 
   const maxWindow = settings?.bookingWindowDays ?? 30;
 
-  // Resetear barbero si no trabaja en la fecha seleccionada
+  // Paso 2→3: consultar disponibilidad TEMPRANO para saber qué barberos trabajan ese día
+  const earlyAvailabilityUrl =
+    serviceId && date && step === 3
+      ? `/api/availability?serviceId=${serviceId}&date=${date}&barberId=any`
+      : null;
+  const { data: earlyAvailability, loading: loadingEarly } =
+    useApi<{ slots: Slot[]; durationMin: number }>(earlyAvailabilityUrl);
+
+  const availableBarberIds = useMemo(() => {
+    if (!earlyAvailability?.slots) return null;
+    const ids = new Set<string>();
+    for (const s of earlyAvailability.slots) {
+      for (const id of s.barberIds) ids.add(id);
+    }
+    return ids;
+  }, [earlyAvailability]);
+
+  // Paso 4: disponibilidad completa para horarios
+  const availabilityUrl =
+    serviceId && date && barberId && step === 4
+      ? `/api/availability?serviceId=${serviceId}&date=${date}&barberId=${barberId}`
+      : null;
+  const { data: availability, loading: loadingSlots, error: slotsError, refresh: refreshSlots } =
+    useApi<{ slots: Slot[]; durationMin: number }>(availabilityUrl);
+
+  // Resetear barbero si no trabaja ese día
   useEffect(() => {
-    if (availableBarberIds && barberId && barberId !== "any" && !availableBarberIds.has(barberId)) {
+    if (availableBarberIds && barberId && !availableBarberIds.has(barberId)) {
       setBarberId(null);
       setSlot(null);
     }
@@ -124,13 +115,11 @@ export function BookingWizard() {
           },
         }
       );
-      // Si la respuesta tiene payment.initPoint → redirigir a MP AHORA
       if ("payment" in result && result.payment.initPoint) {
         setPaymentRedirecting(true);
         window.location.href = result.payment.initPoint;
         return;
       }
-      // Sin pago → mostrar pantalla de confirmación
       setCreated(result as CreatedAppointment);
     } catch (e) {
       const msg = (e as Error).message;
@@ -145,7 +134,6 @@ export function BookingWizard() {
     }
   }
 
-  // ── Pantalla de redirección a MercadoPago ──
   if (paymentRedirecting) {
     return (
       <div className="mx-auto max-w-md py-16 text-center">
@@ -163,7 +151,6 @@ export function BookingWizard() {
     );
   }
 
-  // ── Pantalla final ─────────────────────────────────────────
   if (created) {
     return (
       <ConfirmationScreen
@@ -171,13 +158,15 @@ export function BookingWizard() {
         settings={settings}
         onReset={() => {
           setCreated(null);
-          setStep(1); setServiceId(null); setBarberId(null);
-          setDate(null); setSlot(null);
+          setStep(1); setServiceId(null); setDate(null);
+          setBarberId(null); setSlot(null);
           setForm({ customerName: "", customerPhone: "", customerEmail: "", notes: "" });
         }}
       />
     );
   }
+
+  const activeBarbers = barbers?.filter((b) => b.active) ?? [];
 
   return (
     <div style={{ width: "100%", maxWidth: "100%", overflow: "hidden" }}>
@@ -248,54 +237,60 @@ export function BookingWizard() {
         </Section>
       )}
 
-      {/* PASO 2: Barbero */}
+      {/* PASO 2: Fecha */}
       {step === 2 && (
-        <Section title="¿Con quién querés atenderte?">
-          <div className="grid gap-2.5">
-            {availableBarberIds === null || availableBarberIds.size > 0 ? (
-              <SelectableCard
-                selected={barberId === "any"}
-                onClick={() => { setBarberId("any"); setStep(3); }}
-                emoji="⚡"
-                title="Cualquier barbero"
-                subtitle="Te asignamos automáticamente el primero disponible en tu horario"
-              />
-            ) : null}
-            {barbers?.filter((b) => b.active).map((b) => {
-              const worksThisDay = availableBarberIds === null || availableBarberIds.has(b.id);
-              return (
-                <SelectableCard
-                  key={b.id}
-                  selected={b.id === barberId}
-                  onClick={() => {
-                    if (!worksThisDay) return;
-                    setBarberId(b.id);
-                    setStep(3);
-                  }}
-                  initials={b.name.slice(0, 2).toUpperCase()}
-                  title={b.name}
-                  subtitle={worksThisDay
-                    ? (b.specialty ?? undefined)
-                    : "No trabaja este día"}
-                  right={!worksThisDay ? <span className="text-xs text-danger">✗</span> : undefined}
-                />
-              );
-            })}
-          </div>
-        </Section>
-      )}
-
-      {/* PASO 3: Fecha */}
-      {step === 3 && (
         <Section title="Elegí el día">
           <Calendar
             value={date}
-            onChange={(d) => { setDate(d); setSlot(null); setStep(4); }}
+            onChange={(d) => {
+              setDate(d);
+              setBarberId(null);
+              setSlot(null);
+              setStep(3);
+            }}
             maxDaysAhead={maxWindow}
           />
           <p className="mt-3 text-center text-xs text-muted">
             Podés reservar hasta {maxWindow} días de anticipación
           </p>
+        </Section>
+      )}
+
+      {/* PASO 3: Barbero (filtrado por disponibilidad del día) */}
+      {step === 3 && (
+        <Section title={`¿Quién te atiende el ${date ? formatDateLong(date) : ""}?`}>
+          {loadingEarly ? (
+            <Spinner label="Consultando disponibilidad..." />
+          ) : (
+            <div className="grid gap-2.5">
+              <SelectableCard
+                selected={barberId === "any"}
+                onClick={() => { setBarberId("any"); setSlot(null); setStep(4); }}
+                emoji="⚡"
+                title="Cualquier barbero"
+                subtitle="Te asignamos el primero disponible en tu horario"
+              />
+              {activeBarbers.map((b) => {
+                const works = availableBarberIds === null || availableBarberIds.has(b.id);
+                return (
+                  <SelectableCard
+                    key={b.id}
+                    selected={b.id === barberId}
+                    onClick={() => {
+                      if (!works) return;
+                      setBarberId(b.id);
+                      setSlot(null);
+                      setStep(4);
+                    }}
+                    initials={b.name.slice(0, 2).toUpperCase()}
+                    title={b.name}
+                    subtitle={works ? (b.specialty ?? undefined) : "No trabaja este día"}
+                    right={!works ? <span className="text-xs text-danger">✗</span> : undefined}
+                  />
+                );
+              })}
+            </div>
+          )}
         </Section>
       )}
 
@@ -437,8 +432,6 @@ export function BookingWizard() {
     </div>
   );
 }
-
-// ── Piezas internas ────────────────────────────────────────
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (

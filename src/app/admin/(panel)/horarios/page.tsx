@@ -1,18 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/States";
 import { useApi } from "@/hooks/useApi";
 import { apiFetch } from "@/lib/client";
 import { minToTime, timeToMin, weekdayName } from "@/lib/utils";
 import type { BarberDTO, WorkingHourDTO } from "@/types";
-
-// ═════════════════════════════════════════════════════════
-// HORARIOS LABORALES — editor semanal POR barbero.
-// Guardado atómico: se envía la semana completa y el backend
-// reemplaza todo en una transacción (PUT /working-hours).
-// ═════════════════════════════════════════════════════════
 
 const TIME_OPTIONS: string[] = [];
 for (let m = 6 * 60; m <= 23 * 60; m += 15) TIME_OPTIONS.push(minToTime(m));
@@ -33,11 +27,23 @@ function emptyWeek(): DayRow[] {
   }));
 }
 
+function hydrateFromHours(hours: WorkingHourDTO[]): DayRow[] {
+  const next = emptyWeek();
+  for (const h of hours) {
+    if (!h.active) continue;
+    const row = next[h.weekday];
+    if (!row) continue;
+    row.active = true;
+    row.start = minToTime(h.startMin);
+    row.end = minToTime(h.endMin);
+  }
+  return next;
+}
+
 export default function HorariosPage() {
   const { data: barbers, loading: loadingBarbers } = useApi<BarberDTO[]>("/api/barbers?all=1");
   const [barberId, setBarberId] = useState<string | null>(null);
   const [rows, setRows] = useState<DayRow[]>(emptyWeek());
-  const [loadedFor, setLoadedFor] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -47,11 +53,19 @@ export default function HorariosPage() {
   const whUrl = effectiveBarber ? `/api/barbers/${effectiveBarber}/working-hours` : null;
   const { data: hours, loading: loadingHours, refresh: refreshHours } = useApi<WorkingHourDTO[]>(whUrl);
 
-  // Hidratar filas cuando llegan los horarios del barbero seleccionado
-  if (hours && effectiveBarber && loadedFor !== `${effectiveBarber}:${hours.length}`) {
-    setLoadedFor(`${effectiveBarber}:${hours.length}`);
-    setRows(hydrate(rows, hours));
-  }
+  const lastHydratedKey = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!hours || !effectiveBarber) return;
+    const key = `${effectiveBarber}:${JSON.stringify(hours)}`;
+    if (lastHydratedKey.current === key) return;
+    lastHydratedKey.current = key;
+    setRows(hydrateFromHours(hours));
+  }, [hours, effectiveBarber]);
+
+  useEffect(() => {
+    lastHydratedKey.current = null;
+  }, [effectiveBarber]);
 
   function update(weekday: number, patch: Partial<DayRow>) {
     setRows((rs) => rs.map((r) => (r.weekday === weekday ? { ...r, ...patch } : r)));
@@ -77,8 +91,8 @@ export default function HorariosPage() {
             })),
         },
       });
-      setMsg("Horarios guardados ✓ La web ya refleja los cambios.");
-      setLoadedFor(null);
+      setMsg("Horarios guardados ✓");
+      lastHydratedKey.current = null;
       void refreshHours();
     } catch (e) {
       setErr((e as Error).message);
@@ -98,13 +112,12 @@ export default function HorariosPage() {
         <p className="text-sm text-muted">Días y franjas en que cada barbero atiende</p>
       </header>
 
-      {/* Selector de barbero */}
       <select
         value={effectiveBarber ?? ""}
         onChange={(e) => {
           setBarberId(e.target.value);
-          setLoadedFor(null);
           setRows(emptyWeek());
+          lastHydratedKey.current = null;
           setMsg(null);
           setErr(null);
         }}
@@ -163,19 +176,6 @@ export default function HorariosPage() {
       )}
     </div>
   );
-}
-
-function hydrate(_current: DayRow[], hours: WorkingHourDTO[]): DayRow[] {
-  const next = emptyWeek();
-  for (const h of hours) {
-    if (!h.active) continue;
-    const row = next[h.weekday];
-    if (!row) continue;
-    row.active = true;
-    row.start = minToTime(h.startMin);
-    row.end = minToTime(h.endMin);
-  }
-  return next;
 }
 
 function TimeSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
