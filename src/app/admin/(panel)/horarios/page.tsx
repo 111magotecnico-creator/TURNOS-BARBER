@@ -45,7 +45,7 @@ export default function HorariosPage() {
   const effectiveBarber = barberId ?? barbers?.[0]?.id ?? null;
 
   const whUrl = effectiveBarber ? `/api/barbers/${effectiveBarber}/working-hours` : null;
-  const { data: hours, loading: loadingHours } = useApi<WorkingHourDTO[]>(whUrl);
+  const { data: hours, loading: loadingHours, refresh: refreshHours } = useApi<WorkingHourDTO[]>(whUrl);
 
   // Hidratar filas cuando llegan los horarios del barbero seleccionado
   if (hours && effectiveBarber && loadedFor !== `${effectiveBarber}:${hours.length}`) {
@@ -78,6 +78,8 @@ export default function HorariosPage() {
         },
       });
       setMsg("Horarios guardados ✓ La web ya refleja los cambios.");
+      setLoadedFor(null);
+      void refreshHours();
     } catch (e) {
       setErr((e as Error).message);
     } finally {
