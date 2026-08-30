@@ -78,22 +78,27 @@ export default function HorariosPage() {
     setErr(null);
     setMsg(null);
     try {
-      await apiFetch(`/api/barbers/${effectiveBarber}/working-hours`, {
-        method: "PUT",
-        json: {
-          items: rows
-            .filter((r) => r.active)
-            .map((r) => ({
-              weekday: r.weekday,
-              startMin: timeToMin(r.start),
-              endMin: timeToMin(r.end),
-              active: true,
-            })),
-        },
-      });
+      const result = await apiFetch<{ workingHour: WorkingHourDTO[] }>(
+        `/api/barbers/${effectiveBarber}/working-hours`,
+        {
+          method: "PUT",
+          json: {
+            items: rows
+              .filter((r) => r.active)
+              .map((r) => ({
+                weekday: r.weekday,
+                startMin: timeToMin(r.start),
+                endMin: timeToMin(r.end),
+                active: true,
+              })),
+          },
+        }
+      );
+      const savedHours = result.workingHour ?? [];
+      const key = `${effectiveBarber}:${JSON.stringify(savedHours)}`;
+      lastHydratedKey.current = key;
+      setRows(hydrateFromHours(savedHours));
       setMsg("Horarios guardados ✓");
-      lastHydratedKey.current = null;
-      void refreshHours();
     } catch (e) {
       setErr((e as Error).message);
     } finally {
