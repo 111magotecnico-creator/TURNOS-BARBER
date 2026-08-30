@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -69,6 +69,24 @@ export function BookingWizard() {
   const { data: availability, loading: loadingSlots, error: slotsError, refresh: refreshSlots } =
     useApi<{ slots: Slot[]; durationMin: number }>(availabilityUrl);
 
+  // Consultar disponibilidad temprano para saber qué barberos trabajan ese día
+  const earlyAvailabilityUrl =
+    serviceId && date && step < 4
+      ? `/api/availability?serviceId=${serviceId}&date=${date}&barberId=any`
+      : null;
+  const { data: earlyAvailability } =
+    useApi<{ slots: Slot[]; durationMin: number }>(earlyAvailabilityUrl);
+
+  // Barberos que realmente trabajan la fecha seleccionada
+  const availableBarberIds = useMemo(() => {
+    if (!earlyAvailability?.slots) return null; // null = aún no se consultó
+    const ids = new Set<string>();
+    for (const slot of earlyAvailability.slots) {
+      for (const id of slot.barberIds) ids.add(id);
+    }
+    return ids;
+  }, [earlyAvailability]);
+
   const service = useMemo(
     () => services?.find((s) => s.id === serviceId) ?? null,
     [services, serviceId]
@@ -79,6 +97,14 @@ export function BookingWizard() {
   );
 
   const maxWindow = settings?.bookingWindowDays ?? 30;
+
+  // Resetear barbero si no trabaja en la fecha seleccionada
+  useEffect(() => {
+    if (availableBarberIds && barberId && barberId !== "any" && !availableBarberIds.has(barberId)) {
+      setBarberId(null);
+      setSlot(null);
+    }
+  }, [availableBarberIds, barberId]);
 
   async function confirm() {
     if (!service || !slot || !date) return;
@@ -226,23 +252,35 @@ export function BookingWizard() {
       {step === 2 && (
         <Section title="¿Con quién querés atenderte?">
           <div className="grid gap-2.5">
-            <SelectableCard
-              selected={barberId === "any"}
-              onClick={() => { setBarberId("any"); setStep(3); }}
-              emoji="⚡"
-              title="Cualquier barbero"
-              subtitle="Te asignamos automáticamente el primero disponible en tu horario"
-            />
-            {barbers?.filter((b) => b.active).map((b) => (
+            {availableBarberIds === null || availableBarberIds.size > 0 ? (
               <SelectableCard
-                key={b.id}
-                selected={b.id === barberId}
-                onClick={() => { setBarberId(b.id); setStep(3); }}
-                initials={b.name.slice(0, 2).toUpperCase()}
-                title={b.name}
-                subtitle={b.specialty ?? undefined}
+                selected={barberId === "any"}
+                onClick={() => { setBarberId("any"); setStep(3); }}
+                emoji="⚡"
+                title="Cualquier barbero"
+                subtitle="Te asignamos automáticamente el primero disponible en tu horario"
               />
-            ))}
+            ) : null}
+            {barbers?.filter((b) => b.active).map((b) => {
+              const worksThisDay = availableBarberIds === null || availableBarberIds.has(b.id);
+              return (
+                <SelectableCard
+                  key={b.id}
+                  selected={b.id === barberId}
+                  onClick={() => {
+                    if (!worksThisDay) return;
+                    setBarberId(b.id);
+                    setStep(3);
+                  }}
+                  initials={b.name.slice(0, 2).toUpperCase()}
+                  title={b.name}
+                  subtitle={worksThisDay
+                    ? (b.specialty ?? undefined)
+                    : "No trabaja este día"}
+                  right={!worksThisDay ? <span className="text-xs text-danger">✗</span> : undefined}
+                />
+              );
+            })}
           </div>
         </Section>
       )}
