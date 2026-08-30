@@ -102,6 +102,7 @@ export default function HorariosPage() {
         onChange={(e) => {
           setBarberId(e.target.value);
           setLoadedFor(null);
+          setRows(emptyWeek());
           setMsg(null);
           setErr(null);
         }}
@@ -162,8 +163,8 @@ export default function HorariosPage() {
   );
 }
 
-function hydrate(current: DayRow[], hours: WorkingHourDTO[]): DayRow[] {
-  const next = current.map((r) => ({ ...r, active: false }));
+function hydrate(_current: DayRow[], hours: WorkingHourDTO[]): DayRow[] {
+  const next = emptyWeek();
   for (const h of hours) {
     if (!h.active) continue;
     const row = next[h.weekday];
