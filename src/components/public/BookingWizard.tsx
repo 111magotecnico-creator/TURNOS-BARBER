@@ -519,28 +519,29 @@ function ConfirmationScreen({
 }) {
   const time = `${String(Math.floor(created.startMin / 60)).padStart(2, "0")}:${String(created.startMin % 60).padStart(2, "0")}`;
 
-  function downloadIcs() {
+  const icsUrl = useMemo(() => {
     const d = created.date.replace(/-/g, "");
     const t = time.replace(":", "");
-    const endH = String(created.endMin).padStart(4, "0");
-    const ics = [
+    const endH = String(
+      Math.floor(created.endMin / 60) * 100 + (created.endMin % 60)
+    ).padStart(4, "0");
+    const lines = [
       "BEGIN:VCALENDAR",
       "VERSION:2.0",
+      "PRODID:-//" + (settings?.shopName ?? "Barberia") + "//Turno//ES",
+      "CALSCALE:GREGORIAN",
+      "METHOD:PUBLISH",
       "BEGIN:VEVENT",
       `DTSTART:${d}T${t}00`,
       `DTEND:${d}T${endH}00`,
-      `SUMMARY:${created.serviceName} - ${settings?.shopName ?? "Barbería"}`,
-      `DESCRIPTION:Barbero: ${created.barberName}. Código de turno: ${created.code}`,
+      `SUMMARY:${created.serviceName} - ${settings?.shopName ?? "Barberia"}`,
+      `DESCRIPTION:Barbero: ${created.barberName}. Codigo de turno: ${created.code}`,
       "END:VEVENT",
       "END:VCALENDAR",
     ].join("\r\n");
-    const blob = new Blob([ics], { type: "text/calendar" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `turno-${created.code}.ics`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  }
+    const blob = new Blob([lines], { type: "text/calendar;charset=utf-8" });
+    return URL.createObjectURL(blob);
+  }, [created, time, settings]);
 
   return (
     <div className="mx-auto max-w-md text-center">
@@ -566,9 +567,13 @@ function ConfirmationScreen({
       </Card>
 
       <div className="grid gap-2.5">
-        <Button variant="primary" onClick={downloadIcs}>
-          📥 Agregar al calendario
-        </Button>
+        <a
+          href={icsUrl}
+          download={`turno-${created.code}.ics`}
+          className="rounded-xl border border-line px-4 py-2.5 text-sm font-medium transition hover:border-line-strong"
+        >
+          📅 Agregar al calendario
+        </a>
         <Link
           href={`/turno/${created.code}`}
           className="rounded-xl border border-line px-4 py-2.5 text-sm font-medium transition hover:border-line-strong"
